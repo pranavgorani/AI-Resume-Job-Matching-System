@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { getCandidates } from "@/lib/api";
 import {
   ShieldCheck,
   Plus,
@@ -37,11 +38,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenCopilot,
 }) => {
   const pathname = usePathname();
+  const [candidateCount, setCandidateCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    getCandidates()
+      .then((cands) => setCandidateCount(Array.isArray(cands) ? cands.length : 0))
+      .catch(() => setCandidateCount(null));
+  }, [pathname]);
 
   const navItems = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, badge: null },
     { label: "Jobs", href: "/jobs", icon: Briefcase, badge: null },
-    { label: "Candidates", href: "/candidates", icon: Users, badge: "9" },
+    { 
+      label: "Candidates", 
+      href: "/candidates", 
+      icon: Users, 
+      badge: candidateCount !== null ? String(candidateCount) : null 
+    },
     { label: "Compare", href: "/compare", icon: Layers, badge: null },
     { label: "Analytics", href: "/analytics", icon: BarChart3, badge: "Real-time" },
   ];

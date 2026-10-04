@@ -209,17 +209,25 @@ export async function filterWithNaturalLanguage(jobId: number, query: string) {
 }
 
 // File Upload
-export async function uploadResumes(files: FileList | File[]) {
+export async function uploadResumes(files: FileList | File[], jobId?: number) {
   const formData = new FormData();
   for (let i = 0; i < files.length; i++) {
     formData.append("files", files[i]);
+  }
+  if (jobId !== undefined && jobId !== null && !isNaN(Number(jobId))) {
+    formData.append("job_id", String(jobId));
   }
   const response = await fetch(`${getApiBase()}/api/resumes/batch`, {
     method: "POST",
     body: formData,
   });
   if (!response.ok) {
-    throw new Error("Failed to upload resumes.");
+    let msg = "Failed to upload resumes.";
+    try {
+      const errJson = await response.json();
+      if (errJson?.detail) msg = errJson.detail;
+    } catch (_) {}
+    throw new Error(msg);
   }
   return response.json();
 }

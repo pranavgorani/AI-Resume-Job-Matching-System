@@ -46,6 +46,7 @@ class Job(Base):
     organization = relationship("Organization", back_populates="jobs")
     requirements = relationship("JobRequirement", back_populates="job", cascade="all, delete-orphan")
     match_results = relationship("MatchResult", back_populates="job", cascade="all, delete-orphan")
+    candidates = relationship("Candidate", back_populates="job", cascade="all, delete-orphan")
 
 class JobRequirement(Base):
     __tablename__ = "job_requirements"
@@ -65,6 +66,7 @@ class Candidate(Base):
     __tablename__ = "candidates"
 
     id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True, index=True)
     name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=True)
     phone = Column(String(100), nullable=True)
@@ -76,6 +78,7 @@ class Candidate(Base):
     total_experience_years = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+    job = relationship("Job", back_populates="candidates")
     resumes = relationship("Resume", back_populates="candidate", cascade="all, delete-orphan")
     experiences = relationship("CandidateExperience", back_populates="candidate", cascade="all, delete-orphan")
     educations = relationship("CandidateEducation", back_populates="candidate", cascade="all, delete-orphan")

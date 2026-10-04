@@ -48,20 +48,37 @@ class SupabaseService:
         self,
         file_bytes: bytes,
         original_filename: str,
-        content_type: str = "application/pdf"
+        content_type: str = "application/pdf",
+        job_id: Optional[int] = None,
+        candidate_id: Optional[int] = None
     ) -> Dict[str, str]:
         """
-        Uploads resume PDF file to Supabase Storage bucket 'resumes'.
-        Returns storage path and URL. Falls back to local disk if Supabase Storage is offline.
+        Uploads resume document file to Supabase Storage bucket 'resumes'.
+        Target path: resumes/{job_id}/{candidate_id}/{filename}
+        Falls back to local /tmp or tempfile disk if Supabase Storage is offline or unconfigured.
         """
-        unique_id = uuid.uuid4().hex[:12]
-        sanitized = original_filename.replace(" ", "_")
-        storage_path = f"resumes/{unique_id}_{sanitized}"
+        import tempfile
+        unique_id = uuid.uuid4().hex[:8]
+        sanitized = original_filename.replace(" ", "_").replace("/", "_").replace("\\", "_")
+        job_folder = str(job_id) if job_id else "general"
+        cand_folder = str(candidate_id) if candidate_id else unique_id
+        storage_path = f"resumes/{job_folder}/{cand_folder}/{sanitized}"
+
+        # Detect content type from filename if generic
+        lower_name = original_filename.lower()
+        if lower_name.endswith(".docx"):
+            content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        elif lower_name.endswith(".doc"):
+            content_type = "application/msword"
+        elif lower_name.endswith(".txt"):
+            content_type = "text/plain"
+        elif lower_name.endswith(".pdf"):
+            content_type = "application/pdf"
 
         # Try Supabase Storage upload
         if self._client:
             try:
-                res = self._client.storage.from_(self._bucket_name).upload(
+                self._client.storage.from_(self._bucket_name).upload(
                     path=storage_path,
                     file=file_bytes,
                     file_options={"content-type": content_type, "upsert": "true"}
@@ -76,12 +93,20 @@ class SupabaseService:
             except Exception as e:
                 logger.warning(f"Supabase Storage upload warning ({type(e).__name__}). Using local storage fallback.")
 
-        # Local storage fallback
-        local_dir = Path("uploads")
-        local_dir.mkdir(parents=True, exist_ok=True)
+        # Local storage fallback (Vercel-compatible: uses temp directory if in serverless/read-only)
+        try:
+            local_dir = Path("uploads")
+            local_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            local_dir = Path(tempfile.gettempdir()) / "uploads"
+            local_dir.mkdir(parents=True, exist_ok=True)
+
         local_file_path = local_dir / f"{unique_id}_{sanitized}"
-        with open(local_file_path, "wb") as f:
-            f.write(file_bytes)
+        try:
+            with open(local_file_path, "wb") as f:
+                f.write(file_bytes)
+        except Exception as e:
+            logger.error(f"Failed to write file to local disk fallback: {e}")
 
         return {
             "storage_provider": "local",

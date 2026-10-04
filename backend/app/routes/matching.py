@@ -58,7 +58,12 @@ def run_matching_engine(
         for r in requirements
     ]
 
-    candidates = db.query(orm.Candidate).all()
+    # Prioritize candidates assigned to this job_id or unassigned in candidate pool
+    candidates = db.query(orm.Candidate).filter(
+        (orm.Candidate.job_id == job_id) | (orm.Candidate.job_id.is_(None))
+    ).all()
+    if not candidates:
+        candidates = db.query(orm.Candidate).all()
     if not candidates:
         return {"status": "success", "message": "No candidates in database yet.", "matched_count": 0}
 
@@ -267,6 +272,21 @@ def get_job_matches(job_id: int, db: Session = Depends(get_db)):
         .order_by(orm.MatchResult.overall_match_score.desc())
         .all()
     )
+    if not matches:
+        cand_exists = db.query(orm.Candidate).filter(
+            (orm.Candidate.job_id == job_id) | (orm.Candidate.job_id.is_(None))
+        ).first()
+        if cand_exists:
+            try:
+                run_matching_engine({"job_id": job_id}, db)
+                matches = (
+                    db.query(orm.MatchResult)
+                    .filter(orm.MatchResult.job_id == job_id)
+                    .order_by(orm.MatchResult.overall_match_score.desc())
+                    .all()
+                )
+            except Exception:
+                pass
     
     rows = []
     for rank, m in enumerate(matches, 1):

@@ -94,6 +94,7 @@ def seed_demo_dataset(db: Session = Depends(get_db)):
     # 4. Insert all 8 Candidates
     for c_data in DEMO_CANDIDATES:
         cand = orm.Candidate(
+            job_id=job.id,
             name=c_data["name"],
             email=c_data["email"],
             phone=c_data["phone"],

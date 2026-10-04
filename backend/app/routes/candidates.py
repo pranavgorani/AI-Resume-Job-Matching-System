@@ -18,6 +18,12 @@ def list_all_candidates(
     Search and filter candidates pool by job, minimum match score, recommendation, or risk status.
     """
     query = db.query(orm.Candidate)
+    if job_id:
+        # Strictly filter to candidates belonging to this job_id or evaluated for this job_id
+        matched_cand_ids = db.query(orm.MatchResult.candidate_id).filter(orm.MatchResult.job_id == job_id)
+        query = query.filter(
+            (orm.Candidate.job_id == job_id) | (orm.Candidate.id.in_(matched_cand_ids))
+        )
     candidates = query.all()
 
     rows = []
@@ -28,12 +34,12 @@ def list_all_candidates(
         else:
             match = db.query(orm.MatchResult).filter(orm.MatchResult.candidate_id == cand.id).order_by(orm.MatchResult.overall_match_score.desc()).first()
 
-        match_score = match.overall_match_score if match else 75.0
-        evidence_score = match.evidence_confidence_score if match else 70.0
-        hiring_conf = match.hiring_confidence_score if match else 68.0
-        pot_score = match.potential_match_score if match else 80.0
-        rec = match.recommendation if match else "CONSIDER"
-        cov = f"{match.supported_requirements_count}/{match.total_requirements_count}" if match else "6/9"
+        match_score = float(match.overall_match_score) if match else 0.0
+        evidence_score = float(match.evidence_confidence_score) if match else 0.0
+        hiring_conf = float(match.hiring_confidence_score) if match else 0.0
+        pot_score = float(match.potential_match_score) if match else match_score
+        rec = match.recommendation if match else "EVALUATING"
+        cov = f"{match.supported_requirements_count}/{match.total_requirements_count}" if match else "0/0"
 
         flags_cnt = len(cand.risk_flags) if cand.risk_flags else 0
 

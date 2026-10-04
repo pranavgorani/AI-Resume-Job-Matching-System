@@ -39,6 +39,7 @@ import {
 } from "@/lib/api";
 import { Job, CandidateTableRow } from "@/lib/types";
 import { WhyNotModal } from "@/components/WhyNotModal";
+import { ResumeUploadModal } from "@/components/ResumeUploadModal";
 
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -66,8 +67,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
   // Resume Upload Modal
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
 
   // Why-Not Modal
   const [whyNotCandidate, setWhyNotCandidate] = useState<CandidateTableRow | null>(null);
@@ -164,27 +163,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       return;
     }
     router.push(`/compare?job_id=${jobId}&ids=${selectedIds.join(",")}`);
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    setUploading(true);
-    setUploadMsg(null);
-    try {
-      const res = await uploadResumes(e.target.files);
-      setUploadMsg(`Successfully uploaded and parsed ${res.processed} resume(s)!`);
-      // Re-run matching automatically
-      await runMatching(jobId);
-      await loadData();
-      setTimeout(() => {
-        setUploadModalOpen(false);
-        setUploadMsg(null);
-      }, 2000);
-    } catch (err: any) {
-      alert(`Upload error: ${err.message}`);
-    } finally {
-      setUploading(false);
-    }
   };
 
   // Filtered list
@@ -483,7 +461,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <div className="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40">
               <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Shortlisted</span>
               <span className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5 block">
-                {candidates.filter(c => c.recommendation === "STRONGLY_RECOMMEND" || c.recommendation === "RECOMMEND").length}
+                {candidates.filter(c => ["STRONGLY_RECOMMEND", "RECOMMEND", "Strong Interview", "Interview", "Shortlist"].includes(c.recommendation)).length}
               </span>
             </div>
             <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900/40">
@@ -507,7 +485,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40">
               <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Verify Required</span>
               <span className="text-lg font-extrabold text-amber-700 dark:text-amber-300 mt-0.5 block">
-                {candidates.filter(c => c.recommendation === "VERIFY" || c.risk_flags_count > 0).length}
+                {candidates.filter(c => ["VERIFY", "Verify Claims", "VERIFICATION REQUIRED"].includes(c.recommendation) || c.risk_flags_count > 0).length}
               </span>
             </div>
           </div>
@@ -771,53 +749,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
-      {/* Resume Upload Modal */}
-      {uploadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-              <Upload className="w-5 h-5 text-indigo-600" /> Upload Resumes to Position
-            </h3>
-            <p className="text-xs text-slate-500">
-              Select one or multiple PDF, DOCX, or TXT candidate resumes. System will parse, map evidence, and re-rank.
-            </p>
-
-            <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 text-center space-y-3 bg-slate-50 dark:bg-slate-800/40">
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.docx,.doc,.txt"
-                onChange={handleFileUpload}
-                disabled={uploading}
-                className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
-              />
-              <p className="text-[11px] text-slate-400">PDF, DOCX, or TXT up to 25MB each</p>
-            </div>
-
-            {uploading && (
-              <div className="flex items-center gap-2 text-xs text-indigo-600 font-semibold justify-center">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Parsing documents & evaluating evidence graph...
-              </div>
-            )}
-
-            {uploadMsg && (
-              <div className="p-3 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-semibold text-center">
-                {uploadMsg}
-              </div>
-            )}
-
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={() => setUploadModalOpen(false)}
-                className="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Professional Interactive Resume Upload Modal */}
+      <ResumeUploadModal
+        isOpen={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        jobId={jobId}
+        jobTitle={job?.title}
+        onUploadComplete={loadData}
+      />
 
       {/* Why-Not Intelligence Modal */}
       {whyNotCandidate && (

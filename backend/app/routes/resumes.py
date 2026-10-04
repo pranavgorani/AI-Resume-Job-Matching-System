@@ -15,10 +15,11 @@ router = APIRouter(prefix="/api/resumes", tags=["Resumes"])
 @router.post("/upload")
 async def upload_single_resume(
     file: UploadFile = File(...),
+    job_id: Optional[int] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
-    Accepts PDF, DOCX, or TXT resume, parses content, and registers candidate.
+    Accepts PDF, DOCX, or TXT resume, parses content, and registers candidate for job_id.
     """
     ext = Path(file.filename).suffix.lower()
     if ext not in [".pdf", ".docx", ".doc", ".txt", ".md"]:
@@ -45,11 +46,16 @@ async def upload_single_resume(
     if not raw_text or len(raw_text.strip()) < 30:
         raise HTTPException(status_code=422, detail="Document text is empty or contains insufficient content.")
 
-    # Upload to Supabase Storage bucket 'resumes'
+    # Upload to Supabase Storage bucket 'resumes' with job_id scoping
     from services.supabase_service import get_supabase_service
     from services.ai import get_resume_analyzer, get_embedding_service
     
-    storage_info = get_supabase_service().upload_resume_pdf(file_bytes, file.filename)
+    storage_info = get_supabase_service().upload_resume_pdf(
+        file_bytes=file_bytes,
+        original_filename=file.filename,
+        content_type=detected_type,
+        job_id=job_id
+    )
 
     # Extract structured candidate data using ResumeAnalyzer + resume_intelligence
     extracted = extract_resume_data(raw_text)
@@ -74,24 +80,70 @@ async def upload_single_resume(
                         "years_of_experience": 2.0,
                         "proficiency_claimed": "proficient"
                     })
-    except Exception as ai_err:
+    except Exception:
         pass
 
-    # Persist Candidate
-    candidate = orm.Candidate(
-        name=extracted.get("name", "Unknown Candidate"),
-        email=extracted.get("email"),
-        phone=extracted.get("phone"),
-        location=extracted.get("location"),
-        linkedin=extracted.get("linkedin"),
-        github=extracted.get("github"),
-        portfolio=extracted.get("portfolio"),
-        summary=extracted.get("summary"),
-        total_experience_years=float(extracted.get("total_experience_years", 3.0))
-    )
-    db.add(candidate)
-    db.commit()
-    db.refresh(candidate)
+    cand_name = extracted.get("name", "Unknown Candidate")
+    cand_email = extracted.get("email")
+
+    # Check for duplicate candidate (by email or name+job_id)
+    existing_candidate = None
+    if cand_email:
+        if job_id:
+            existing_candidate = db.query(orm.Candidate).filter(
+                orm.Candidate.email == cand_email,
+                orm.Candidate.job_id == job_id
+            ).first()
+        if not existing_candidate:
+            existing_candidate = db.query(orm.Candidate).filter(orm.Candidate.email == cand_email).first()
+    elif cand_name and cand_name != "Unknown Candidate" and job_id:
+        existing_candidate = db.query(orm.Candidate).filter(
+            orm.Candidate.name == cand_name,
+            orm.Candidate.job_id == job_id
+        ).first()
+
+def safe_float(val, default=0.0) -> float:
+    if val is None or val == "":
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+    if existing_candidate:
+        candidate = existing_candidate
+        if job_id and not candidate.job_id:
+            candidate.job_id = job_id
+        candidate.name = cand_name
+        candidate.phone = extracted.get("phone") or candidate.phone
+        candidate.location = extracted.get("location") or candidate.location
+        candidate.summary = extracted.get("summary") or candidate.summary
+        candidate.total_experience_years = safe_float(extracted.get("total_experience_years"), candidate.total_experience_years or 3.0)
+        # Clear child records to reload cleanly
+        db.query(orm.CandidateSkill).filter(orm.CandidateSkill.candidate_id == candidate.id).delete()
+        db.query(orm.CandidateExperience).filter(orm.CandidateExperience.candidate_id == candidate.id).delete()
+        db.query(orm.CandidateEducation).filter(orm.CandidateEducation.candidate_id == candidate.id).delete()
+        db.query(orm.CandidateProject).filter(orm.CandidateProject.candidate_id == candidate.id).delete()
+        db.query(orm.CandidateCertification).filter(orm.CandidateCertification.candidate_id == candidate.id).delete()
+        db.query(orm.CandidateClaim).filter(orm.CandidateClaim.candidate_id == candidate.id).delete()
+        db.commit()
+    else:
+        # Persist New Candidate with exact job_id
+        candidate = orm.Candidate(
+            job_id=job_id,
+            name=cand_name,
+            email=cand_email,
+            phone=extracted.get("phone"),
+            location=extracted.get("location"),
+            linkedin=extracted.get("linkedin"),
+            github=extracted.get("github"),
+            portfolio=extracted.get("portfolio"),
+            summary=extracted.get("summary"),
+            total_experience_years=safe_float(extracted.get("total_experience_years"), 3.0)
+        )
+        db.add(candidate)
+        db.commit()
+        db.refresh(candidate)
 
     # Persist Resume record with Supabase Storage metadata
     resume_rec = orm.Resume(
@@ -130,7 +182,7 @@ async def upload_single_resume(
             role=exp.get("role", "Engineer"),
             start_date=exp.get("start_date"),
             end_date=exp.get("end_date"),
-            duration_years=float(exp.get("duration_years", 1.0)),
+            duration_years=safe_float(exp.get("duration_years"), 1.0),
             responsibilities=exp.get("responsibilities", []),
             achievements=exp.get("achievements", []),
             technologies=exp.get("technologies", [])
@@ -151,7 +203,7 @@ async def upload_single_resume(
             candidate_id=candidate.id,
             name=s.get("name", "Skill"),
             category=s.get("category", "technical"),
-            years_of_experience=float(s.get("years_of_experience", 2.0)),
+            years_of_experience=safe_float(s.get("years_of_experience"), 2.0),
             proficiency_claimed=s.get("proficiency_claimed", "proficient")
         ))
 
@@ -178,7 +230,7 @@ async def upload_single_resume(
             candidate_id=candidate.id,
             claim_text=cl.get("claim_text", ""),
             claimed_skill=cl.get("claimed_skill"),
-            claimed_duration_years=cl.get("claimed_duration_years"),
+            claimed_duration_years=safe_float(cl.get("claimed_duration_years"), 1.0),
             claimed_seniority=cl.get("claimed_seniority"),
             verification_status="SUPPORTED",
             confidence_score=0.85
@@ -186,11 +238,28 @@ async def upload_single_resume(
 
     db.commit()
 
+    # Automatically trigger Deterministic Matching Engine if job_id was provided
+    match_score = None
+    if job_id:
+        try:
+            from app.routes.matching import run_matching_engine
+            run_matching_engine({"job_id": job_id}, db)
+            match_res = db.query(orm.MatchResult).filter(
+                orm.MatchResult.candidate_id == candidate.id,
+                orm.MatchResult.job_id == job_id
+            ).first()
+            if match_res:
+                match_score = match_res.overall_match_score
+        except Exception as match_err:
+            print(f"[RESUME UPLOAD] Matching auto-run error: {match_err}")
+
     return {
         "status": "success",
         "message": f"Successfully parsed and registered candidate {candidate.name}",
         "candidate_id": candidate.id,
         "name": candidate.name,
+        "job_id": job_id,
+        "match_score": match_score,
         "skills_detected": len(extracted.get("skills", [])),
         "total_experience_years": candidate.total_experience_years
     }
@@ -198,15 +267,16 @@ async def upload_single_resume(
 @router.post("/batch")
 async def upload_batch_resumes(
     files: List[UploadFile] = File(...),
+    job_id: Optional[int] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
-    Uploads and processes multiple resumes simultaneously.
+    Uploads and processes multiple resumes simultaneously with optional job_id scoping.
     """
     results = []
     for file in files:
         try:
-            res = await upload_single_resume(file, db)
+            res = await upload_single_resume(file=file, job_id=job_id, db=db)
             results.append(res)
         except Exception as e:
             results.append({
@@ -214,4 +284,14 @@ async def upload_batch_resumes(
                 "file_name": file.filename,
                 "error": str(e)
             })
-    return {"processed": len(results), "results": results}
+
+    # If job_id was provided, ensure matching ran and updated rankings for all candidates
+    if job_id:
+        try:
+            from app.routes.matching import run_matching_engine
+            run_matching_engine({"job_id": job_id}, db)
+        except Exception as match_err:
+            print(f"[BATCH UPLOAD] Matching final run error: {match_err}")
+
+    return {"processed": len(results), "job_id": job_id, "results": results}
+
