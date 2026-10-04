@@ -10,11 +10,18 @@ logger = logging.getLogger("talentproof.supabase")
 class SupabaseService:
     """
     Manages Supabase PostgreSQL, pgvector embeddings storage, and Supabase Storage bucket for resumes.
-    Includes graceful local fallback to ensure zero runtime disruptions.
+    Operates in-memory to guarantee full serverless compatibility on Vercel without local disk persistence.
     """
     def __init__(self):
         self._url = os.getenv("SUPABASE_URL", os.getenv("NEXT_PUBLIC_SUPABASE_URL", ""))
-        self._key = os.getenv("SUPABASE_PUBLISHABLE_KEY", os.getenv("SUPABASE_KEY", os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "")))
+        # Check server-only service role key first, then publishable/anon keys
+        self._key = (
+            os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+            or os.getenv("SUPABASE_PUBLISHABLE_KEY")
+            or os.getenv("SUPABASE_KEY")
+            or os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+            or ""
+        )
         self._bucket_name = os.getenv("SUPABASE_STORAGE_BUCKET", "resumes")
         self._client = None
 
@@ -32,17 +39,23 @@ class SupabaseService:
         return self._client is not None
 
     def _init_bucket(self):
-        """Attempts to verify or create the resumes storage bucket."""
+        """Attempts to verify or create the resumes storage bucket safely."""
         if not self._client:
             return
         try:
-            # Check or create bucket
             buckets = self._client.storage.list_buckets()
-            bucket_names = [b.name for b in buckets] if hasattr(buckets[0], 'name') else [b['name'] for b in buckets]
+            bucket_names = [
+                (b.name if hasattr(b, 'name') else b.get('name', ''))
+                for b in (buckets or [])
+            ]
             if self._bucket_name not in bucket_names:
-                self._client.storage.create_bucket(self._bucket_name, options={"public": True})
+                try:
+                    self._client.storage.create_bucket(self._bucket_name, options={"public": True})
+                    logger.info(f"[SUPABASE STORAGE] Created bucket '{self._bucket_name}'")
+                except Exception as ce:
+                    logger.debug(f"[SUPABASE STORAGE] Bucket create notice: {ce}")
         except Exception as e:
-            logger.debug(f"Bucket check note: {type(e).__name__}")
+            logger.debug(f"[SUPABASE STORAGE] Bucket list notice: {type(e).__name__}: {e}")
 
     def upload_resume_pdf(
         self,
@@ -54,10 +67,9 @@ class SupabaseService:
     ) -> Dict[str, str]:
         """
         Uploads resume document file to Supabase Storage bucket 'resumes'.
-        Target path: resumes/{job_id}/{candidate_id}/{filename}
-        Falls back to local /tmp or tempfile disk if Supabase Storage is offline or unconfigured.
+        Target path: resumes/{job_id}/{candidate_id}/{filename} or resumes/{job_id}/{unique_id}/{filename}
+        Never writes permanently to local serverless filesystem.
         """
-        import tempfile
         unique_id = uuid.uuid4().hex[:8]
         sanitized = original_filename.replace(" ", "_").replace("/", "_").replace("\\", "_")
         job_folder = str(job_id) if job_id else "general"
@@ -75,7 +87,7 @@ class SupabaseService:
         elif lower_name.endswith(".pdf"):
             content_type = "application/pdf"
 
-        # Try Supabase Storage upload
+        # 1. Try Supabase Storage upload
         if self._client:
             try:
                 self._client.storage.from_(self._bucket_name).upload(
@@ -84,6 +96,7 @@ class SupabaseService:
                     file_options={"content-type": content_type, "upsert": "true"}
                 )
                 public_url = self._client.storage.from_(self._bucket_name).get_public_url(storage_path)
+                logger.info(f"[UPLOAD] Supabase Storage upload successful: {storage_path}")
                 return {
                     "storage_provider": "supabase",
                     "storage_path": storage_path,
@@ -91,27 +104,13 @@ class SupabaseService:
                     "filename": original_filename
                 }
             except Exception as e:
-                logger.warning(f"Supabase Storage upload warning ({type(e).__name__}). Using local storage fallback.")
+                logger.warning(f"[UPLOAD] Supabase Storage upload notice ({type(e).__name__}): {e}")
 
-        # Local storage fallback (Vercel-compatible: uses temp directory if in serverless/read-only)
-        try:
-            local_dir = Path("uploads")
-            local_dir.mkdir(parents=True, exist_ok=True)
-        except OSError:
-            local_dir = Path(tempfile.gettempdir()) / "uploads"
-            local_dir.mkdir(parents=True, exist_ok=True)
-
-        local_file_path = local_dir / f"{unique_id}_{sanitized}"
-        try:
-            with open(local_file_path, "wb") as f:
-                f.write(file_bytes)
-        except Exception as e:
-            logger.error(f"Failed to write file to local disk fallback: {e}")
-
+        # 2. In-memory / serverless safe fallback (no persistent local disk write)
         return {
-            "storage_provider": "local",
-            "storage_path": str(local_file_path),
-            "file_url": f"/uploads/{local_file_path.name}",
+            "storage_provider": "in_memory",
+            "storage_path": storage_path,
+            "file_url": "",
             "filename": original_filename
         }
 
@@ -135,7 +134,7 @@ class SupabaseService:
             self._client.table("embeddings").upsert(data).execute()
             return True
         except Exception as e:
-            logger.debug(f"pgvector storage note ({type(e).__name__}) - saved to local database.")
+            logger.debug(f"pgvector storage notice ({type(e).__name__})")
             return False
 
     def query_similar_embeddings(

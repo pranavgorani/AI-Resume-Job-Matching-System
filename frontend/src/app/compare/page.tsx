@@ -357,7 +357,7 @@ function CompareContent() {
                           {c.name}
                         </Link>
                         <span className="text-[10px] text-slate-400 font-normal">
-                          {c.recommendation.replace("_", " ")}
+                          {(c.recommendation || "REVIEW").replace(/_/g, " ")}
                         </span>
                       </th>
                     ))}
@@ -517,7 +517,7 @@ function CompareContent() {
                             ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300"
                             : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
                         }`}>
-                          {c.recommendation.replace("_", " ")}
+                          {(c.recommendation || "REVIEW").replace(/_/g, " ")}
                         </span>
                       </td>
                     ))}

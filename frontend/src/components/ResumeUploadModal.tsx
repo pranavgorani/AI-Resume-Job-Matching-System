@@ -13,7 +13,7 @@ import {
   Sparkles,
   ArrowRight
 } from "lucide-react";
-import { uploadResumes, runMatching } from "@/lib/api";
+import { uploadSingleResume, uploadResumes, runMatching } from "@/lib/api";
 
 interface ResumeUploadModalProps {
   isOpen: boolean;
@@ -28,7 +28,15 @@ interface UploadingFile {
   file: File;
   name: string;
   size: number;
-  status: "Waiting" | "Uploading" | "Parsing" | "Mapping Evidence" | "Scoring" | "Completed" | "Failed";
+  status:
+    | "Waiting"
+    | "Uploading..."
+    | "Parsing resume..."
+    | "Extracting candidate information..."
+    | "Mapping evidence..."
+    | "Calculating score..."
+    | "Completed ✓"
+    | "Failed ✕";
   progress: number;
   error?: string;
   candidateName?: string;
@@ -77,7 +85,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
         file,
         name: file.name,
         size: file.size,
-        status: error ? "Failed" : "Waiting",
+        status: error ? "Failed ✕" : "Waiting",
         progress: error ? 0 : 0,
         error: error || undefined,
       });
@@ -107,6 +115,12 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
+  const retryFile = (id: string) => {
+    setFiles((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, status: "Waiting", progress: 0, error: undefined } : f))
+    );
+  };
+
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -114,7 +128,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   };
 
   const handleProcessUploads = async () => {
-    const validFiles = files.filter((f) => f.status !== "Completed" && !f.error);
+    const validFiles = files.filter((f) => f.status !== "Completed ✓" && !f.error);
     if (validFiles.length === 0) {
       setGlobalError("Please add at least one valid resume file (PDF, DOCX, TXT) to upload.");
       return;
@@ -124,91 +138,91 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
     setGlobalError(null);
     setSuccessMessage(null);
 
-    // Update statuses to Uploading
-    setFiles((prev) =>
-      prev.map((f) =>
-        validFiles.some((vf) => vf.id === f.id)
-          ? { ...f, status: "Uploading", progress: 20 }
-          : f
-      )
-    );
+    let completedSuccessCount = 0;
 
-    try {
-      // Step: Parsing
-      await new Promise((r) => setTimeout(r, 400));
-      setFiles((prev) =>
-        prev.map((f) =>
-          validFiles.some((vf) => vf.id === f.id)
-            ? { ...f, status: "Parsing", progress: 45 }
-            : f
-        )
-      );
-
-      // Call API with all files and exact jobId
-      const rawFiles = validFiles.map((vf) => vf.file);
-      const res = await uploadResumes(rawFiles, jobId);
-
-      // Step: Mapping Evidence
-      setFiles((prev) =>
-        prev.map((f) =>
-          validFiles.some((vf) => vf.id === f.id)
-            ? { ...f, status: "Mapping Evidence", progress: 75 }
-            : f
-        )
-      );
-      await new Promise((r) => setTimeout(r, 400));
-
-      // Step: Scoring
-      setFiles((prev) =>
-        prev.map((f) =>
-          validFiles.some((vf) => vf.id === f.id)
-            ? { ...f, status: "Scoring", progress: 90 }
-            : f
-        )
-      );
-      await new Promise((r) => setTimeout(r, 400));
-
-      // Run matching engine to ensure fresh rankings
+    for (const target of validFiles) {
       try {
-        await runMatching(jobId);
-      } catch (_) {}
+        // Step 1: Uploading...
+        setFiles((prev) =>
+          prev.map((f) => (f.id === target.id ? { ...f, status: "Uploading...", progress: 20, error: undefined } : f))
+        );
+        await new Promise((r) => setTimeout(r, 180));
 
-      // Update to Completed
-      setFiles((prev) =>
-        prev.map((f) => {
-          const matchingResult = res.results?.find((r: any) => r.file_name === f.name || r.name);
-          return validFiles.some((vf) => vf.id === f.id)
-            ? {
-                ...f,
-                status: "Completed",
-                progress: 100,
-                candidateName: matchingResult?.name || "Verified Candidate",
-              }
-            : f;
-        })
-      );
+        // Step 2: Parsing resume...
+        setFiles((prev) =>
+          prev.map((f) => (f.id === target.id ? { ...f, status: "Parsing resume...", progress: 40 } : f))
+        );
 
-      setSuccessMessage(
-        `Successfully processed and ranked ${validFiles.length} candidate resume(s) for Requisition #${jobId}!`
-      );
+        // Upload single resume with exact jobId
+        const res = await uploadSingleResume(target.file, jobId);
 
-      // Refresh parent page data without manual reload
-      await onUploadComplete();
-    } catch (err: any) {
-      setGlobalError(err.message || "Resume upload failed. Please retry.");
-      setFiles((prev) =>
-        prev.map((f) =>
-          validFiles.some((vf) => vf.id === f.id)
-            ? { ...f, status: "Failed", error: err.message || "Upload failed" }
-            : f
-        )
-      );
-    } finally {
-      setIsProcessing(false);
+        // Step 3: Extracting candidate information...
+        setFiles((prev) =>
+          prev.map((f) => (f.id === target.id ? { ...f, status: "Extracting candidate information...", progress: 60 } : f))
+        );
+        await new Promise((r) => setTimeout(r, 180));
+
+        // Step 4: Mapping evidence...
+        setFiles((prev) =>
+          prev.map((f) => (f.id === target.id ? { ...f, status: "Mapping evidence...", progress: 80 } : f))
+        );
+        await new Promise((r) => setTimeout(r, 180));
+
+        // Step 5: Calculating score...
+        setFiles((prev) =>
+          prev.map((f) => (f.id === target.id ? { ...f, status: "Calculating score...", progress: 95 } : f))
+        );
+        await new Promise((r) => setTimeout(r, 180));
+
+        // Step 6: Completed ✓
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === target.id
+              ? {
+                  ...f,
+                  status: "Completed ✓",
+                  progress: 100,
+                  candidateName: res?.name || "Verified Candidate",
+                }
+              : f
+          )
+        );
+        completedSuccessCount++;
+      } catch (err: any) {
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === target.id
+              ? {
+                  ...f,
+                  status: "Failed ✕",
+                  progress: 0,
+                  error: err?.message || "Resume upload failed. Please retry.",
+                }
+              : f
+          )
+        );
+      }
     }
+
+    // Refresh parent page data without manual reload
+    try {
+      await onUploadComplete();
+    } catch (refreshErr) {
+      console.warn("[RESUME UPLOAD] Auto-refresh notice:", refreshErr);
+    }
+
+    if (completedSuccessCount > 0) {
+      setSuccessMessage(
+        `Successfully processed and ranked ${completedSuccessCount} candidate resume(s) for Requisition #${jobId}!`
+      );
+    } else {
+      setGlobalError("Resume processing could not be completed. Please review file format or retry.");
+    }
+
+    setIsProcessing(false);
   };
 
-  const completedCount = files.filter((f) => f.status === "Completed").length;
+  const completedCount = files.filter((f) => f.status === "Completed ✓").length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in">
@@ -338,9 +352,9 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                       {/* Status Badge */}
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          item.status === "Completed"
+                          item.status === "Completed ✓"
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                            : item.status === "Failed"
+                            : item.status === "Failed ✕"
                             ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
                             : item.status === "Waiting"
                             ? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
@@ -350,8 +364,19 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                         {item.status}
                       </span>
 
+                      {/* Retry Button for Failed Files */}
+                      {item.status === "Failed ✕" && !isProcessing && (
+                        <button
+                          onClick={() => retryFile(item.id)}
+                          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50"
+                        >
+                          <RefreshCw className="w-2.5 h-2.5" />
+                          Retry
+                        </button>
+                      )}
+
                       {/* Remove Button */}
-                      {!isProcessing && item.status !== "Completed" && (
+                      {!isProcessing && item.status !== "Completed ✓" && (
                         <button
                           onClick={() => removeFile(item.id)}
                           className="p-1 rounded-lg text-slate-400 hover:text-rose-500 transition-colors"
@@ -367,9 +392,9 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                     <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-300 ${
-                          item.status === "Completed"
+                          item.status === "Completed ✓"
                             ? "bg-emerald-500"
-                            : item.status === "Failed"
+                            : item.status === "Failed ✕"
                             ? "bg-rose-500"
                             : "bg-indigo-600"
                         }`}
@@ -410,7 +435,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
 
             <button
               onClick={handleProcessUploads}
-              disabled={isProcessing || files.length === 0 || files.every((f) => f.status === "Completed")}
+              disabled={isProcessing || files.length === 0 || files.every((f) => f.status === "Completed ✓")}
               className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white shadow-md shadow-indigo-600/20 transition-all"
             >
               {isProcessing ? (
@@ -421,7 +446,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
               ) : (
                 <>
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>Process & Rank ({files.filter((f) => f.status !== "Completed" && !f.error).length})</span>
+                  <span>Process & Rank ({files.filter((f) => f.status !== "Completed ✓" && !f.error).length})</span>
                 </>
               )}
             </button>

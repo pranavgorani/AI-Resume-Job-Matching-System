@@ -84,14 +84,20 @@ Return a JSON object with:
 }}
 """
 
+        import concurrent.futures
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
-            result = coordinator.generate_json(prompt, system_instruction=RESUME_EXTRACTION_SYSTEM)
+            future = executor.submit(coordinator.generate_json, prompt, RESUME_EXTRACTION_SYSTEM)
+            result = future.result(timeout=2.5)
+            executor.shutdown(wait=False, cancel_futures=True)
+
             # Ensure all required keys exist
             formatted = self._normalize_result(result, cleaned_text)
             self._cache[cache_key] = formatted
             return formatted
         except Exception as e:
-            logger.warning(f"AI resume extraction error: {type(e).__name__}. Using intelligent regex extraction.")
+            executor.shutdown(wait=False, cancel_futures=True)
+            logger.info(f"AI resume extraction skipped or timed out ({type(e).__name__}). Using fast deterministic extraction.")
             # Heuristic extraction fallback
             fallback = self._heuristic_extraction(cleaned_text)
             self._cache[cache_key] = fallback
@@ -99,21 +105,23 @@ Return a JSON object with:
 
     def _normalize_result(self, raw: Dict[str, Any], text: str) -> Dict[str, Any]:
         """Ensures all 14 fields are cleanly typed and populated."""
+        if not isinstance(raw, dict):
+            return self._heuristic_extraction(text)
         return {
-            "name": str(raw.get("name", "Unknown Candidate")),
-            "email": str(raw.get("email", "")),
-            "phone": str(raw.get("phone", "")),
-            "location": str(raw.get("location", "")),
-            "education": raw.get("education", []),
-            "companies": raw.get("companies", []),
-            "job_titles": raw.get("job_titles", []),
-            "employment_dates": raw.get("employment_dates", []),
-            "years_of_experience": float(raw.get("years_of_experience", 0.0) or 0.0),
-            "skills": raw.get("skills", []),
-            "certifications": raw.get("certifications", []),
-            "projects": raw.get("projects", []),
-            "technologies": raw.get("technologies", []),
-            "achievements": raw.get("achievements", []),
+            "name": str(raw.get("name") or "Unknown Candidate"),
+            "email": str(raw.get("email") or ""),
+            "phone": str(raw.get("phone") or ""),
+            "location": str(raw.get("location") or ""),
+            "education": raw.get("education") or [],
+            "companies": raw.get("companies") or [],
+            "job_titles": raw.get("job_titles") or [],
+            "employment_dates": raw.get("employment_dates") or [],
+            "years_of_experience": float(raw.get("years_of_experience") or 3.0),
+            "skills": raw.get("skills") or [],
+            "certifications": raw.get("certifications") or [],
+            "projects": raw.get("projects") or [],
+            "technologies": raw.get("technologies") or [],
+            "achievements": raw.get("achievements") or [],
             "raw_text": text
         }
 

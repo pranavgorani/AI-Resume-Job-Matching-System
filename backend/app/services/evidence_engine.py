@@ -122,11 +122,14 @@ def build_evidence_graph(
             })
         elif matching_experiences:
             # Good evidence from company experience
+            exp_item = matching_experiences[0]
+            resps = exp_item.get("responsibilities") or []
+            resp_snippet = resps[0] if resps else f"Verified {exp_item.get('role', 'engineering')} experience"
             evidence_items.append({
                 "job_requirement_id": req.get("id"),
                 "requirement_name": req_name,
                 "claim_snippet": f"Workplace experience in {req_name}",
-                "evidence_snippet": f"Deployed at {matching_experiences[0].get('company')} ({matching_experiences[0].get('start_date')}-{matching_experiences[0].get('end_date')}): {matching_experiences[0].get('responsibilities', [''])[0]}",
+                "evidence_snippet": f"Deployed at {exp_item.get('company', 'Company')} ({exp_item.get('start_date') or 'Past'}-{exp_item.get('end_date') or 'Present'}): {resp_snippet}",
                 "source_section": "experience",
                 "strength": "HIGH", # GREEN
                 "evidence_score": 86.0,

@@ -75,37 +75,43 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
 
-  const loadData = async () => {
+  const loadData = async (isBackground: boolean = false) => {
     if (!rawId || rawId === "undefined" || rawId === "null" || isNaN(jobId) || jobId <= 0) {
-      setErrorStatus(404);
-      setErrorMessage("Job not found. The requested requisition identifier is invalid.");
-      setLoading(false);
+      if (!isBackground) {
+        setErrorStatus(404);
+        setErrorMessage("Job not found. The requested requisition identifier is invalid.");
+        setLoading(false);
+      }
       return;
     }
 
     try {
-      setLoading(true);
-      setErrorStatus(null);
-      setErrorMessage(null);
+      if (!isBackground) {
+        setLoading(true);
+        setErrorStatus(null);
+        setErrorMessage(null);
+      }
       const [j, matches] = await Promise.all([
         getJob(jobId),
-        getJobMatches(jobId).catch(() => []),
+        getJobMatches(jobId).catch((err) => {
+          console.warn("[JOB MATCHES] Fallback empty matches:", err);
+          return [];
+        }),
       ]);
-      setJob(j);
-      setCandidates(matches);
+      if (j) setJob(j);
+      if (Array.isArray(matches)) setCandidates(matches);
     } catch (e: any) {
-      const status = e instanceof ApiError ? e.status : (e.status || 500);
-      setErrorStatus(status);
-      setErrorMessage(e.message || "Unable to load job");
-      if (process.env.NODE_ENV === "development") {
-        console.error("[JOB DEBUG] Failed to load job detail:", {
-          jobId,
-          status,
-          message: e.message
-        });
+      if (!isBackground && !job) {
+        const status = e instanceof ApiError ? e.status : (e.status || 500);
+        setErrorStatus(status);
+        setErrorMessage(e.message || "Unable to load job");
+      } else {
+        console.warn("[JOB REFRESH] Non-blocking background data update error:", e);
       }
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
   };
 
@@ -675,7 +681,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       href={`/candidates/${cand.candidate_id}?job_id=${jobId}`}
                       className="font-bold text-slate-900 dark:text-white hover:text-indigo-600 hover:underline block text-sm"
                     >
-                      {cand.name}
+                      {cand.name || "Candidate"}
                     </Link>
                     {cand.top_transferable_skill && (
                       <span className="text-[10px] text-amber-600 font-medium">
@@ -684,22 +690,22 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     )}
                   </td>
                   <td className="py-3.5 px-4 font-extrabold text-sm text-slate-900 dark:text-white">
-                    {cand.match_score}%
+                    {cand.match_score ?? 0}%
                   </td>
                   <td className="py-3.5 px-4 font-bold text-emerald-600">
-                    {cand.evidence_score}%
+                    {cand.evidence_score ?? 0}%
                   </td>
                   <td className="py-3.5 px-4 font-bold text-amber-600">
-                    {cand.hiring_confidence}%
+                    {cand.hiring_confidence ?? 0}%
                   </td>
                   <td className="py-3.5 px-4 font-mono font-medium text-slate-600 dark:text-slate-300">
-                    {cand.required_skills_coverage}
+                    {cand.required_skills_coverage || "0/0"}
                   </td>
                   <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
-                    {cand.experience_years} yrs
+                    {cand.experience_years ?? 0} yrs
                   </td>
                   <td className="py-3.5 px-4">
-                    {cand.risk_flags_count > 0 ? (
+                    {(cand.risk_flags_count ?? 0) > 0 ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                         <AlertTriangle className="w-3 h-3 text-amber-600" />
                         {cand.risk_flags_count} flag{cand.risk_flags_count > 1 ? "s" : ""}
@@ -711,7 +717,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     )}
                   </td>
                   <td className="py-3.5 px-4 font-bold text-indigo-600">
-                    {cand.potential_score}%
+                    {cand.potential_score ?? 0}%
                   </td>
                   <td className="py-3.5 px-4">
                     <span
@@ -725,7 +731,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                           : "bg-slate-100 text-slate-700"
                       }`}
                     >
-                      {cand.recommendation.replace("_", " ")}
+                      {(cand.recommendation || "REVIEW").replace(/_/g, " ")}
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-right space-x-2">
@@ -755,7 +761,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         onClose={() => setUploadModalOpen(false)}
         jobId={jobId}
         jobTitle={job?.title}
-        onUploadComplete={loadData}
+        onUploadComplete={() => loadData(true)}
       />
 
       {/* Why-Not Intelligence Modal */}

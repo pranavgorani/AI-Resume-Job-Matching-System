@@ -468,7 +468,7 @@ export default function CandidatesPoolPage() {
                               : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400"
                           }`}
                         >
-                          {cand.recommendation.replace("_", " ")}
+                          {(cand.recommendation || "REVIEW").replace(/_/g, " ")}
                         </span>
                       </td>
 

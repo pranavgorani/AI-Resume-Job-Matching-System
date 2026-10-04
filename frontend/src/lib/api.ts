@@ -1,17 +1,35 @@
 export function getApiBase(): string {
-  if (process.env.NEXT_PUBLIC_API_URL !== undefined && process.env.NEXT_PUBLIC_API_URL !== "") {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  // Server-side (SSR / Server Functions): use Vercel service binding
-  if (typeof window === "undefined") {
-    return process.env.BACKEND_SERVICE_URL || process.env.BACKEND_URL || "http://127.0.0.1:8000";
-  }
-  // Client-side browser in local dev
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+  // Client-side browser execution
+  if (typeof window !== "undefined") {
+    const isLocal =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "0.0.0.0";
+    if (!isLocal) {
+      // In production browser, NEVER use localhost. Use relative path so Vercel rewrites route to backend
+      return "";
+    }
+    if (process.env.NEXT_PUBLIC_API_URL) {
+      return process.env.NEXT_PUBLIC_API_URL;
+    }
     return "http://127.0.0.1:8000";
   }
-  // Client-side browser in production on Vercel (public rewrites handle /api)
-  return "";
+
+  // Server-side (SSR / Server Functions): use Vercel service binding or backend URL
+  if (process.env.BACKEND_SERVICE_URL) {
+    return process.env.BACKEND_SERVICE_URL;
+  }
+  if (process.env.BACKEND_URL) {
+    return process.env.BACKEND_URL;
+  }
+  if (
+    process.env.NEXT_PUBLIC_API_URL &&
+    !process.env.NEXT_PUBLIC_API_URL.includes("localhost") &&
+    !process.env.NEXT_PUBLIC_API_URL.includes("127.0.0.1")
+  ) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  return "http://127.0.0.1:8000";
 }
 
 export const API_BASE = getApiBase();
@@ -209,6 +227,27 @@ export async function filterWithNaturalLanguage(jobId: number, query: string) {
 }
 
 // File Upload
+export async function uploadSingleResume(file: File, jobId?: number) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (jobId !== undefined && jobId !== null && !isNaN(Number(jobId))) {
+    formData.append("job_id", String(jobId));
+  }
+  const response = await fetch(`${getApiBase()}/api/resumes/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    let msg = `Failed to process ${file.name}.`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.detail) msg = errJson.detail;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  return response.json();
+}
+
 export async function uploadResumes(files: FileList | File[], jobId?: number) {
   const formData = new FormData();
   for (let i = 0; i < files.length; i++) {

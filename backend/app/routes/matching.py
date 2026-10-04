@@ -291,28 +291,31 @@ def get_job_matches(job_id: int, db: Session = Depends(get_db)):
     rows = []
     for rank, m in enumerate(matches, 1):
         cand = m.candidate
+        if not cand:
+            continue
         flags_count = len(cand.risk_flags) if cand.risk_flags else 0
         
         # Check transferable
         transferable_name = None
-        for ev in cand.evidence_items:
-            if ev.is_transferable:
-                transferable_name = ev.requirement_name
-                break
+        if cand.evidence_items:
+            for ev in cand.evidence_items:
+                if getattr(ev, "is_transferable", False):
+                    transferable_name = ev.requirement_name
+                    break
 
         rows.append(schemas.CandidateTableRow(
             rank=rank,
             candidate_id=cand.id,
-            name=cand.name,
-            email=cand.email,
-            match_score=m.overall_match_score,
-            evidence_score=m.evidence_confidence_score,
-            hiring_confidence=m.hiring_confidence_score,
-            potential_score=m.potential_match_score,
-            required_skills_coverage=f"{m.supported_requirements_count}/{m.total_requirements_count}",
-            experience_years=cand.total_experience_years,
+            name=cand.name or "Unnamed Candidate",
+            email=cand.email or "",
+            match_score=float(m.overall_match_score or 0.0),
+            evidence_score=float(m.evidence_confidence_score or 0.0),
+            hiring_confidence=float(m.hiring_confidence_score or 0.0),
+            potential_score=float(m.potential_match_score or 0.0),
+            required_skills_coverage=f"{m.supported_requirements_count or 0}/{m.total_requirements_count or 0}",
+            experience_years=float(cand.total_experience_years or 0.0),
             risk_flags_count=flags_count,
-            recommendation=m.recommendation,
+            recommendation=m.recommendation or "REVIEW",
             top_transferable_skill=transferable_name
         ))
     return rows

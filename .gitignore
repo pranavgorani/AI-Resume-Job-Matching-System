@@ -30,6 +30,7 @@ dist/
 build/
 
 # Uploads / Cache
+uploads/
 backend/uploads/*
 !backend/uploads/.gitkeep
 backend/.pytest_cache/

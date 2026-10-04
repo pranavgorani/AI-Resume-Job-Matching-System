@@ -113,7 +113,7 @@ class ResilientAICoordinator:
         primary = self.get_primary()
         fallback = self.get_fallback()
 
-        # Try Gemini (Primary) with exponential backoff
+        # Try Gemini (Primary) with fast failover on quota limits
         if primary.is_available():
             for attempt in range(2):
                 try:
@@ -122,8 +122,13 @@ class ResilientAICoordinator:
                         self._cache[cache_key] = res
                         return res
                 except Exception as e:
-                    logger.warning(f"Gemini attempt {attempt + 1} failed: {type(e).__name__}. Retrying...")
-                    time.sleep(1.0 * (2 ** attempt))
+                    err_str = str(e)
+                    logger.warning(f"Gemini attempt {attempt + 1} notice: {type(e).__name__}")
+                    # Fast failover if quota/rate limited or unauthorized
+                    if any(k in err_str for k in ("429", "RESOURCE_EXHAUSTED", "quota", "Quota", "401", "403")):
+                        break
+                    if attempt == 0:
+                        time.sleep(0.3)
 
         # Fallback to Hugging Face
         if fallback.is_available():
@@ -134,7 +139,7 @@ class ResilientAICoordinator:
                     self._cache[cache_key] = res
                     return res
             except Exception as e:
-                logger.error(f"Hugging Face fallback failed: {type(e).__name__}")
+                logger.error(f"Hugging Face fallback notice: {type(e).__name__}")
 
         raise RuntimeError("AI service temporarily unavailable. Please retry in a few moments.")
 
@@ -151,7 +156,7 @@ class ResilientAICoordinator:
         primary = self.get_primary()
         fallback = self.get_fallback()
 
-        # Try Gemini
+        # Try Gemini with fast failover
         if primary.is_available():
             for attempt in range(2):
                 try:
@@ -160,8 +165,12 @@ class ResilientAICoordinator:
                         self._cache[cache_key] = res
                         return res
                 except Exception as e:
-                    logger.warning(f"Gemini JSON attempt {attempt + 1} failed: {type(e).__name__}. Retrying...")
-                    time.sleep(1.0 * (2 ** attempt))
+                    err_str = str(e)
+                    logger.warning(f"Gemini JSON attempt {attempt + 1} notice: {type(e).__name__}")
+                    if any(k in err_str for k in ("429", "RESOURCE_EXHAUSTED", "quota", "Quota", "401", "403")):
+                        break
+                    if attempt == 0:
+                        time.sleep(0.3)
 
         # Fallback to Hugging Face
         if fallback.is_available():
@@ -172,7 +181,7 @@ class ResilientAICoordinator:
                     self._cache[cache_key] = res
                     return res
             except Exception as e:
-                logger.error(f"Hugging Face fallback failed: {type(e).__name__}")
+                logger.error(f"Hugging Face fallback notice: {type(e).__name__}")
 
         raise RuntimeError("AI analysis temporarily unavailable. Please verify API configuration or try again.")
 
@@ -183,19 +192,25 @@ class ResilientAICoordinator:
         primary = self.get_primary()
         fallback = self.get_fallback()
 
+        import concurrent.futures
+
         if primary.is_available():
             try:
-                return primary.generate_embeddings(texts)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    fut = executor.submit(primary.generate_embeddings, texts)
+                    return fut.result(timeout=1.5)
             except Exception as e:
-                logger.warning(f"Gemini embeddings failed: {type(e).__name__}. Trying fallback...")
+                logger.warning(f"Gemini embeddings notice ({type(e).__name__}). Trying fallback...")
 
         if fallback.is_available():
             try:
-                return fallback.generate_embeddings(texts)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    fut = executor.submit(fallback.generate_embeddings, texts)
+                    return fut.result(timeout=1.5)
             except Exception as e:
-                logger.error(f"Hugging Face embeddings failed: {type(e).__name__}")
+                logger.warning(f"Hugging Face embeddings notice ({type(e).__name__}). Falling back to local...")
 
-        # Deterministic local fallback embeddings
+        # Deterministic local fallback embeddings (<1ms)
         from .embedding_service import generate_deterministic_embedding
         if isinstance(texts, str):
             return [generate_deterministic_embedding(texts)]

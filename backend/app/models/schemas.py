@@ -223,18 +223,18 @@ class CandidateDetailOut(BaseModel):
         from_attributes = True
 
 class CandidateTableRow(BaseModel):
-    rank: int
+    rank: int = 1
     candidate_id: int
-    name: str
-    email: Optional[str]
-    match_score: float
-    evidence_score: float
-    hiring_confidence: float
-    potential_score: float
-    required_skills_coverage: str # e.g. "8/9"
-    experience_years: float
-    risk_flags_count: int
-    recommendation: str
+    name: str = "Unnamed Candidate"
+    email: Optional[str] = None
+    match_score: float = 0.0
+    evidence_score: float = 0.0
+    hiring_confidence: float = 0.0
+    potential_score: float = 0.0
+    required_skills_coverage: str = "0/0"
+    experience_years: float = 0.0
+    risk_flags_count: int = 0
+    recommendation: str = "REVIEW"
     top_transferable_skill: Optional[str] = None
 
 # --- Comparison ---

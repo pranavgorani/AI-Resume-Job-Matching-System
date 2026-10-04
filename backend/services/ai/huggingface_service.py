@@ -21,7 +21,7 @@ class HuggingFaceProvider(AIProvider):
         if self._token:
             try:
                 from huggingface_hub import InferenceClient
-                self._client = InferenceClient(token=self._token)
+                self._client = InferenceClient(token=self._token, timeout=4.0)
             except Exception as e:
                 logger.warning(f"Failed to initialize HuggingFace InferenceClient: {type(e).__name__}")
                 self._client = None

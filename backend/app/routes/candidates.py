@@ -62,16 +62,16 @@ def list_all_candidates(
         rows.append(schemas.CandidateTableRow(
             rank=0, # sorted below
             candidate_id=cand.id,
-            name=cand.name,
-            email=cand.email,
-            match_score=match_score,
-            evidence_score=evidence_score,
-            hiring_confidence=hiring_conf,
-            potential_score=pot_score,
-            required_skills_coverage=cov,
-            experience_years=cand.total_experience_years,
+            name=cand.name or "Unnamed Candidate",
+            email=cand.email or "",
+            match_score=float(match_score or 0.0),
+            evidence_score=float(evidence_score or 0.0),
+            hiring_confidence=float(hiring_conf or 0.0),
+            potential_score=float(pot_score or 0.0),
+            required_skills_coverage=cov or "0/0",
+            experience_years=float(cand.total_experience_years or 0.0),
             risk_flags_count=flags_cnt,
-            recommendation=rec,
+            recommendation=rec or "REVIEW",
             top_transferable_skill=transferable_name
         ))
 
