@@ -1,9 +1,20 @@
-const API_BASE = 
-  process.env.NEXT_PUBLIC_API_URL !== undefined
-    ? process.env.NEXT_PUBLIC_API_URL
-    : (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")
-      ? ""
-      : "http://127.0.0.1:8000";
+export function getApiBase(): string {
+  if (process.env.NEXT_PUBLIC_API_URL !== undefined && process.env.NEXT_PUBLIC_API_URL !== "") {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  // Server-side (SSR / Server Functions): use Vercel service binding
+  if (typeof window === "undefined") {
+    return process.env.BACKEND_SERVICE_URL || process.env.BACKEND_URL || "http://127.0.0.1:8000";
+  }
+  // Client-side browser in local dev
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return "http://127.0.0.1:8000";
+  }
+  // Client-side browser in production on Vercel (public rewrites handle /api)
+  return "";
+}
+
+export const API_BASE = getApiBase();
 
 export class ApiError extends Error {
   status: number;
@@ -20,7 +31,8 @@ export class ApiError extends Error {
 }
 
 export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE}${endpoint}`;
+  const base = getApiBase();
+  const url = `${base}${endpoint}`;
   try {
     const response = await fetch(url, {
       ...options,
@@ -202,7 +214,7 @@ export async function uploadResumes(files: FileList | File[]) {
   for (let i = 0; i < files.length; i++) {
     formData.append("files", files[i]);
   }
-  const response = await fetch(`${API_BASE}/api/resumes/batch`, {
+  const response = await fetch(`${getApiBase()}/api/resumes/batch`, {
     method: "POST",
     body: formData,
   });
@@ -230,6 +242,6 @@ export function getReportDownloadUrl(format: "csv" | "pdf" | "docx", params: Rec
       q.append(k, String(v));
     }
   }
-  return `${API_BASE}/api/reports/analytics/${format}?${q.toString()}`;
+  return `${getApiBase()}/api/reports/analytics/${format}?${q.toString()}`;
 }
 
