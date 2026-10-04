@@ -1,4 +1,4 @@
-# AI-Resume-Job-Matching-System# TalentProof AI
+# TalentProof AI
 
 > **"Don't just rank resumes. Prove the match."**
 > 
