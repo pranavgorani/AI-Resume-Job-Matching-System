@@ -104,9 +104,10 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
 }
 
 // 1-Click Demo
-export async function seedDemoData() {
+export async function seedDemoData(jobId?: number) {
   return fetchApi<{ status: string; message: string; job_id: number; candidates_count: number }>("/api/demo/seed", {
     method: "POST",
+    body: jobId !== undefined && jobId !== null && !isNaN(Number(jobId)) ? JSON.stringify({ job_id: Number(jobId) }) : undefined,
   });
 }
 

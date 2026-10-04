@@ -58,14 +58,15 @@ def run_matching_engine(
         for r in requirements
     ]
 
-    # Prioritize candidates assigned to this job_id or unassigned in candidate pool
+    # Only evaluate candidates assigned to this job_id or unassigned in candidate pool
     candidates = db.query(orm.Candidate).filter(
         (orm.Candidate.job_id == job_id) | (orm.Candidate.job_id.is_(None))
     ).all()
     if not candidates:
-        candidates = db.query(orm.Candidate).all()
-    if not candidates:
-        return {"status": "success", "message": "No candidates in database yet.", "matched_count": 0}
+        # Clear prior match results if no candidates exist for this job
+        db.query(orm.MatchResult).filter(orm.MatchResult.job_id == job_id).delete()
+        db.commit()
+        return {"status": "success", "message": "No candidates assigned to this job yet.", "matched_count": 0}
 
     # Clear prior match results for this job to ensure fresh deterministic calculation
     db.query(orm.MatchResult).filter(orm.MatchResult.job_id == job_id).delete()

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Body, Query
 from sqlalchemy.orm import Session
+from typing import Optional, Dict, Any
 from app.database import get_db, init_db
 from app.models import orm
 from app.seed_data import DEMO_JOB, DEMO_CANDIDATES
@@ -8,72 +9,99 @@ from app.routes.matching import run_matching_engine
 router = APIRouter(prefix="/api/demo", tags=["Demo"])
 
 @router.post("/seed")
-def seed_demo_dataset(db: Session = Depends(get_db)):
+def seed_demo_dataset(
+    payload: Optional[Dict[str, Any]] = Body(None),
+    job_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
-    1-Click Demo initialization for Hackathon Judges:
-    Seeds 'Senior Full Stack AI Engineer' job and all 8 realistic candidate archetypes,
-    then automatically runs the complete Evidence-First Matching Engine.
+    Demo candidate initialization:
+    Seeds candidate archetypes for the specified job_id (or default demo job),
+    then automatically executes the complete Evidence-First Matching Engine.
     """
     # 0. Ensure tables exist
     init_db()
 
-    # 1. Check if demo job already exists
-    existing_job = db.query(orm.Job).filter(orm.Job.title == DEMO_JOB["title"]).first()
-    if existing_job:
-        job = existing_job
-        job.raw_description = DEMO_JOB["raw_description"]
-        job.seniority = DEMO_JOB["seniority"]
-        job.min_years_experience = DEMO_JOB["min_years_experience"]
-        job.education_required = DEMO_JOB["education_required"]
-        job.location = DEMO_JOB["location"]
-        job.work_mode = DEMO_JOB["work_mode"]
-        job.responsibilities = DEMO_JOB["responsibilities"]
-        job.tools_and_tech = DEMO_JOB["tools_and_tech"]
-        job.domain_knowledge = DEMO_JOB["domain_knowledge"]
-        job.soft_skills = DEMO_JOB["soft_skills"]
-        job.status = "active"
-        db.commit()
-
-        # Clean old requirements and match results for this job
+    target_job_id = None
+    if payload and isinstance(payload, dict) and payload.get("job_id"):
         try:
-            db.query(orm.SkillGap).delete()
-            db.query(orm.MatchResult).filter(orm.MatchResult.job_id == job.id).delete()
-            db.query(orm.JobRequirement).filter(orm.JobRequirement.job_id == job.id).delete()
-            db.commit()
-        except Exception:
-            db.rollback()
-    else:
-        # Create Job
-        job = orm.Job(
-            title=DEMO_JOB["title"],
-            raw_description=DEMO_JOB["raw_description"],
-            seniority=DEMO_JOB["seniority"],
-            min_years_experience=DEMO_JOB["min_years_experience"],
-            education_required=DEMO_JOB["education_required"],
-            location=DEMO_JOB["location"],
-            work_mode=DEMO_JOB["work_mode"],
-            responsibilities=DEMO_JOB["responsibilities"],
-            tools_and_tech=DEMO_JOB["tools_and_tech"],
-            domain_knowledge=DEMO_JOB["domain_knowledge"],
-            soft_skills=DEMO_JOB["soft_skills"],
-            status="active"
-        )
-        db.add(job)
-        db.commit()
-        db.refresh(job)
+            target_job_id = int(payload.get("job_id"))
+        except (ValueError, TypeError):
+            pass
+    elif job_id is not None:
+        target_job_id = int(job_id)
 
-    # Clean old candidate records for a fresh evaluation
+    job = None
+    if target_job_id and target_job_id > 0:
+        job = db.query(orm.Job).filter(orm.Job.id == target_job_id).first()
+
+    if not job:
+        # Check if default demo job already exists
+        existing_job = db.query(orm.Job).filter(orm.Job.title == DEMO_JOB["title"]).first()
+        if existing_job:
+            job = existing_job
+            job.raw_description = DEMO_JOB["raw_description"]
+            job.seniority = DEMO_JOB["seniority"]
+            job.min_years_experience = DEMO_JOB["min_years_experience"]
+            job.education_required = DEMO_JOB["education_required"]
+            job.location = DEMO_JOB["location"]
+            job.work_mode = DEMO_JOB["work_mode"]
+            job.responsibilities = DEMO_JOB["responsibilities"]
+            job.tools_and_tech = DEMO_JOB["tools_and_tech"]
+            job.domain_knowledge = DEMO_JOB["domain_knowledge"]
+            job.soft_skills = DEMO_JOB["soft_skills"]
+            job.status = "active"
+            db.commit()
+        else:
+            job = orm.Job(
+                title=DEMO_JOB["title"],
+                raw_description=DEMO_JOB["raw_description"],
+                seniority=DEMO_JOB["seniority"],
+                min_years_experience=DEMO_JOB["min_years_experience"],
+                education_required=DEMO_JOB["education_required"],
+                location=DEMO_JOB["location"],
+                work_mode=DEMO_JOB["work_mode"],
+                responsibilities=DEMO_JOB["responsibilities"],
+                tools_and_tech=DEMO_JOB["tools_and_tech"],
+                domain_knowledge=DEMO_JOB["domain_knowledge"],
+                soft_skills=DEMO_JOB["soft_skills"],
+                status="active"
+            )
+            db.add(job)
+            db.commit()
+            db.refresh(job)
+
+    # Ensure job requirements exist for matching
+    existing_reqs = db.query(orm.JobRequirement).filter(orm.JobRequirement.job_id == job.id).count()
+    if existing_reqs == 0:
+        for req in DEMO_JOB["requirements"]:
+            db.add(orm.JobRequirement(
+                job_id=job.id,
+                name=req["name"],
+                category=req["category"],
+                tier=req["tier"],
+                description=f"Core capability in {req['name']}",
+                expected_years=req["expected_years"],
+                weight=req["weight"]
+            ))
+        db.commit()
+
+    # Clean old candidate records for THIS target job
     try:
-        db.query(orm.InterviewQuestion).delete()
-        db.query(orm.RiskFlag).delete()
-        db.query(orm.CandidateEvidence).delete()
-        db.query(orm.CandidateClaim).delete()
-        db.query(orm.CandidateProject).delete()
-        db.query(orm.CandidateSkill).delete()
-        db.query(orm.CandidateEducation).delete()
-        db.query(orm.CandidateExperience).delete()
-        db.query(orm.Resume).delete()
-        db.query(orm.Candidate).delete()
+        cands_to_clean = db.query(orm.Candidate).filter(orm.Candidate.job_id == job.id).all()
+        cand_ids = [c.id for c in cands_to_clean]
+        if cand_ids:
+            db.query(orm.InterviewQuestion).filter(orm.InterviewQuestion.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
+            db.query(orm.RiskFlag).filter(orm.RiskFlag.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
+            db.query(orm.CandidateEvidence).filter(orm.CandidateEvidence.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
+            db.query(orm.CandidateClaim).filter(orm.CandidateClaim.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
+            db.query(orm.CandidateProject).filter(orm.CandidateProject.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
+            db.query(orm.CandidateSkill).filter(orm.CandidateSkill.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
+            db.query(orm.CandidateEducation).filter(orm.CandidateEducation.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
+            db.query(orm.CandidateExperience).filter(orm.CandidateExperience.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
+            db.query(orm.Resume).filter(orm.Resume.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
+            db.query(orm.Candidate).filter(orm.Candidate.id.in_(cand_ids)).delete(synchronize_session=False)
+        db.query(orm.MatchResult).filter(orm.MatchResult.job_id == job.id).delete(synchronize_session=False)
         db.commit()
     except Exception:
         db.rollback()

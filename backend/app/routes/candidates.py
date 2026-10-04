@@ -17,20 +17,26 @@ def list_all_candidates(
     """
     Search and filter candidates pool by job, minimum match score, recommendation, or risk status.
     """
+    # Sanitize parameters in case function is called directly without FastAPI injection
+    actual_job_id = job_id if isinstance(job_id, int) else None
+    actual_min_score = min_score if isinstance(min_score, (int, float)) else None
+    actual_rec = recommendation if isinstance(recommendation, str) and recommendation.strip() else None
+    actual_has_risks = has_risks if isinstance(has_risks, bool) else None
+
     query = db.query(orm.Candidate)
-    if job_id:
+    if actual_job_id:
         # Strictly filter to candidates belonging to this job_id or evaluated for this job_id
-        matched_cand_ids = db.query(orm.MatchResult.candidate_id).filter(orm.MatchResult.job_id == job_id)
+        matched_cand_ids = db.query(orm.MatchResult.candidate_id).filter(orm.MatchResult.job_id == actual_job_id)
         query = query.filter(
-            (orm.Candidate.job_id == job_id) | (orm.Candidate.id.in_(matched_cand_ids))
+            (orm.Candidate.job_id == actual_job_id) | (orm.Candidate.id.in_(matched_cand_ids))
         )
     candidates = query.all()
 
     rows = []
     for cand in candidates:
         match = None
-        if job_id:
-            match = db.query(orm.MatchResult).filter(orm.MatchResult.candidate_id == cand.id, orm.MatchResult.job_id == job_id).first()
+        if actual_job_id:
+            match = db.query(orm.MatchResult).filter(orm.MatchResult.candidate_id == cand.id, orm.MatchResult.job_id == actual_job_id).first()
         else:
             match = db.query(orm.MatchResult).filter(orm.MatchResult.candidate_id == cand.id).order_by(orm.MatchResult.overall_match_score.desc()).first()
 
@@ -44,13 +50,13 @@ def list_all_candidates(
         flags_cnt = len(cand.risk_flags) if cand.risk_flags else 0
 
         # Apply filters if provided
-        if min_score is not None and match_score < min_score:
+        if actual_min_score is not None and match_score < actual_min_score:
             continue
-        if recommendation is not None and rec.upper() != recommendation.upper():
+        if actual_rec is not None and rec.upper() != actual_rec.upper():
             continue
-        if has_risks is True and flags_cnt == 0:
+        if actual_has_risks is True and flags_cnt == 0:
             continue
-        if has_risks is False and flags_cnt > 0:
+        if actual_has_risks is False and flags_cnt > 0:
             continue
 
         transferable_name = None

@@ -180,23 +180,24 @@ async def upload_single_resume(
     # 7. Database Persistence (Safe Duplicate Resolution & Upsert)
     try:
         existing_candidate = None
-        if cand_email and not cand_email.endswith("@applicant.talentproof.ai"):
-            if valid_job_id:
+        if valid_job_id:
+            if cand_email and not cand_email.endswith("@applicant.talentproof.ai"):
                 existing_candidate = db.query(orm.Candidate).filter(
                     orm.Candidate.email == cand_email,
                     orm.Candidate.job_id == valid_job_id
                 ).first()
-            if not existing_candidate:
+            elif cand_name and cand_name != "Verified Candidate":
+                existing_candidate = db.query(orm.Candidate).filter(
+                    orm.Candidate.name == cand_name,
+                    orm.Candidate.job_id == valid_job_id
+                ).first()
+        else:
+            if cand_email and not cand_email.endswith("@applicant.talentproof.ai"):
                 existing_candidate = db.query(orm.Candidate).filter(orm.Candidate.email == cand_email).first()
-        elif cand_name and cand_name != "Verified Candidate" and valid_job_id:
-            existing_candidate = db.query(orm.Candidate).filter(
-                orm.Candidate.name == cand_name,
-                orm.Candidate.job_id == valid_job_id
-            ).first()
 
         if existing_candidate:
             candidate = existing_candidate
-            if valid_job_id and not candidate.job_id:
+            if valid_job_id:
                 candidate.job_id = valid_job_id
             candidate.name = cand_name
             candidate.phone = extracted.get("phone") or candidate.phone
