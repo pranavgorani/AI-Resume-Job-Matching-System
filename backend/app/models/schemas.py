@@ -218,6 +218,9 @@ class CandidateDetailOut(BaseModel):
     risk_flags: List[RiskFlagOut] = []
     interview_questions: List[InterviewQuestionOut] = []
     match_result: Optional[MatchResultOut] = None
+    processing_status: Optional[str] = "COMPLETED"
+    processing_error: Optional[str] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -225,6 +228,7 @@ class CandidateDetailOut(BaseModel):
 class CandidateTableRow(BaseModel):
     rank: int = 1
     candidate_id: int
+    job_id: Optional[int] = None
     name: str = "Unnamed Candidate"
     email: Optional[str] = None
     match_score: float = 0.0
@@ -236,6 +240,58 @@ class CandidateTableRow(BaseModel):
     risk_flags_count: int = 0
     recommendation: str = "REVIEW"
     top_transferable_skill: Optional[str] = None
+    processing_status: str = "COMPLETED"
+    processing_error: Optional[str] = None
+
+# --- Processing & Jobs ---
+class ProcessingJobOut(BaseModel):
+    id: str
+    job_id: int
+    candidate_id: Optional[int] = None
+    file_name: str
+    status: str # QUEUED, UPLOADING, UPLOADED, PARSING, ANALYZING, COMPLETED, FAILED
+    stage: str
+    progress_percent: int = 0
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+# --- Benchmark ---
+class BenchmarkCandidateItem(BaseModel):
+    candidate_id: int
+    name: str
+    match_score: float
+    evidence_score: float
+    hiring_confidence: float
+    risk_level: str
+    recommendation: str
+    expected_category: str
+    actual_category: str
+    status: str
+
+class BenchmarkRunResponse(BaseModel):
+    benchmark_run_id: str
+    job_id: int
+    seed: int
+    total: int
+    completed: int
+    failed: int
+    average_match: float
+    average_evidence: float
+    average_hiring_confidence: float
+    high_risk_count: int
+    strong_count: int
+    moderate_count: int
+    weak_count: int
+    poor_count: int
+    processing_time_seconds: float
+    precision: Optional[float] = None
+    recall: Optional[float] = None
+    f1: Optional[float] = None
+    candidates: List[BenchmarkCandidateItem] = []
 
 # --- Comparison ---
 class CandidateComparisonRequest(BaseModel):

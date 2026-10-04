@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import init_db
-from app.routes import jobs, resumes, candidates, matching, compare, copilot, demo, export, reports
+from app.routes import jobs, resumes, candidates, matching, compare, copilot, demo, export, reports, processing, benchmark
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,6 +37,8 @@ app.include_router(copilot.router)
 app.include_router(demo.router)
 app.include_router(export.router)
 app.include_router(reports.router)
+app.include_router(processing.router)
+app.include_router(benchmark.router)
 
 
 @app.get("/")

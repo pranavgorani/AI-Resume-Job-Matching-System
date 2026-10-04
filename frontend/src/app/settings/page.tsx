@@ -219,6 +219,26 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* 50-Resume Benchmark Tool */}
+      <div className="bg-gradient-to-r from-indigo-900/10 via-slate-900/10 to-purple-900/10 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200 dark:border-indigo-800/80 rounded-2xl p-6 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-600" /> 50-Resume Production Stress Test & Benchmark
+            </h3>
+            <p className="text-xs text-slate-500">
+              Run the developer benchmark with 50 randomized synthetic candidate profiles across 5 realistic archetypes to verify accuracy, scoring determinism, and Supabase PostgreSQL persistence.
+            </p>
+          </div>
+          <a
+            href="/benchmark"
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-600/20 shrink-0"
+          >
+            Open Benchmark Runner →
+          </a>
+        </div>
+      </div>
+
       {/* Fair Match & Bias Protection Compliance */}
       <div className="p-6 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
         <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold text-sm">

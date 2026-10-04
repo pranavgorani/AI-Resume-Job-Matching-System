@@ -18,10 +18,16 @@ class Settings(BaseSettings):
     # Environment check for serverless environments (Vercel / AWS Lambda)
     IS_SERVERLESS: bool = os.getenv("VERCEL") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None
 
-    # Database
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", 
-        "sqlite:////tmp/talentproof.db" if (os.getenv("VERCEL") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None) else f"sqlite:///{BASE_DIR}/talentproof.db"
+    # Database (Supabase PostgreSQL / SQLite fallback)
+    DATABASE_URL: str = (
+        os.getenv("DATABASE_URL")
+        or os.getenv("POSTGRES_URL")
+        or os.getenv("SUPABASE_DATABASE_URL")
+        or (
+            "sqlite:////tmp/talentproof.db"
+            if (os.getenv("VERCEL") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None)
+            else f"sqlite:///{BASE_DIR}/talentproof.db"
+        )
     )
     
     # Gemini AI
@@ -35,9 +41,10 @@ class Settings(BaseSettings):
     # Supabase (Database, pgvector, and Storage)
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", os.getenv("NEXT_PUBLIC_SUPABASE_URL", ""))
     SUPABASE_PUBLISHABLE_KEY: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", ""))
-    SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "resumes")
+    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "resume-files")
     
-    # Uploads
+    # Uploads (Ephemeral buffer only - all permanent storage goes to Supabase Storage)
     UPLOAD_DIR: Path = Path("/tmp/uploads") if (os.getenv("VERCEL") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None) else (BASE_DIR / "uploads")
     
     # Default Match Weights (recruiter configurable)

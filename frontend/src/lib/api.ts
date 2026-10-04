@@ -293,3 +293,27 @@ export function getReportDownloadUrl(format: "csv" | "pdf" | "docx", params: Rec
   return `${getApiBase()}/api/reports/analytics/${format}?${q.toString()}`;
 }
 
+// Processing & Retries
+export async function getProcessingStatus(jobId: number) {
+  return fetchApi<any>(`/api/processing/status/${jobId}`);
+}
+
+export async function retryCandidateAnalysis(candidateId: number) {
+  return fetchApi<any>(`/api/processing/retry/${candidateId}`, {
+    method: "POST",
+  });
+}
+
+// Benchmark
+export async function runBenchmark(seed: number = 12345) {
+  return fetchApi<any>("/api/benchmark/run", {
+    method: "POST",
+    body: JSON.stringify({ seed }),
+  });
+}
+
+export async function getLatestBenchmark() {
+  return fetchApi<any>("/api/benchmark/latest");
+}
+
+

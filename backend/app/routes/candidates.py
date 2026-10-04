@@ -25,11 +25,7 @@ def list_all_candidates(
 
     query = db.query(orm.Candidate)
     if actual_job_id:
-        # Strictly filter to candidates belonging to this job_id or evaluated for this job_id
-        matched_cand_ids = db.query(orm.MatchResult.candidate_id).filter(orm.MatchResult.job_id == actual_job_id)
-        query = query.filter(
-            (orm.Candidate.job_id == actual_job_id) | (orm.Candidate.id.in_(matched_cand_ids))
-        )
+        query = query.filter(orm.Candidate.job_id == actual_job_id)
     candidates = query.all()
 
     rows = []
@@ -68,6 +64,7 @@ def list_all_candidates(
         rows.append(schemas.CandidateTableRow(
             rank=0, # sorted below
             candidate_id=cand.id,
+            job_id=cand.job_id,
             name=cand.name or "Unnamed Candidate",
             email=cand.email or "",
             match_score=float(match_score or 0.0),
@@ -78,7 +75,9 @@ def list_all_candidates(
             experience_years=float(cand.total_experience_years or 0.0),
             risk_flags_count=flags_cnt,
             recommendation=rec or "REVIEW",
-            top_transferable_skill=transferable_name
+            top_transferable_skill=transferable_name,
+            processing_status=cand.processing_status or "COMPLETED",
+            processing_error=cand.processing_error
         ))
 
     rows.sort(key=lambda r: r.match_score, reverse=True)

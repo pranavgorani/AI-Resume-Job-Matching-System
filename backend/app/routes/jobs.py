@@ -52,14 +52,15 @@ def create_job(payload: schemas.JobCreate, db: Session = Depends(get_db)):
     return job
 
 def _enrich_job(job: orm.Job) -> schemas.JobOut:
+    candidates = job.candidates or []
     matches = job.match_results or []
-    cand_count = len(matches)
+    cand_count = len(candidates)
     shortlisted_count = sum(
         1 for m in matches if m.recommendation in ["RECOMMEND", "STRONGLY_RECOMMEND"]
     )
     avg_score = (
-        round(sum(m.overall_match_score for m in matches) / cand_count, 1)
-        if cand_count > 0
+        round(sum(m.overall_match_score for m in matches) / len(matches), 1)
+        if len(matches) > 0
         else 0.0
     )
     job_out = schemas.JobOut.model_validate(job)

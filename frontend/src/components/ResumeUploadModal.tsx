@@ -34,6 +34,7 @@ interface UploadingFile {
     | "Parsing resume..."
     | "Extracting candidate information..."
     | "Mapping evidence..."
+    | "Checking contradictions..."
     | "Calculating score..."
     | "Completed ✓"
     | "Failed ✕";
@@ -142,39 +143,40 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
 
     for (const target of validFiles) {
       try {
-        // Step 1: Uploading...
+        // Step 1: Uploading to Supabase...
         setFiles((prev) =>
           prev.map((f) => (f.id === target.id ? { ...f, status: "Uploading...", progress: 20, error: undefined } : f))
         );
-        await new Promise((r) => setTimeout(r, 180));
+        await new Promise((r) => setTimeout(r, 120));
 
-        // Step 2: Parsing resume...
+        // Step 2: Parsing resumes...
         setFiles((prev) =>
-          prev.map((f) => (f.id === target.id ? { ...f, status: "Parsing resume...", progress: 40 } : f))
+          prev.map((f) => (f.id === target.id ? { ...f, status: "Parsing resume...", progress: 35 } : f))
         );
 
-        // Upload single resume with exact jobId
+        // Upload single resume with exact jobId to Supabase & Backend
         const res = await uploadSingleResume(target.file, jobId);
 
-        // Step 3: Extracting candidate information...
+        // Step 3: Mapping evidence...
         setFiles((prev) =>
-          prev.map((f) => (f.id === target.id ? { ...f, status: "Extracting candidate information...", progress: 60 } : f))
+          prev.map((f) => (f.id === target.id ? { ...f, status: "Mapping evidence...", progress: 60 } : f))
         );
-        await new Promise((r) => setTimeout(r, 180));
+        await new Promise((r) => setTimeout(r, 120));
 
-        // Step 4: Mapping evidence...
+        // Step 4: Checking contradictions...
         setFiles((prev) =>
-          prev.map((f) => (f.id === target.id ? { ...f, status: "Mapping evidence...", progress: 80 } : f))
+          prev.map((f) => (f.id === target.id ? { ...f, status: "Checking contradictions...", progress: 80 } : f))
         );
-        await new Promise((r) => setTimeout(r, 180));
+        await new Promise((r) => setTimeout(r, 120));
 
-        // Step 5: Calculating score...
+        // Step 5: Calculating explainable scores...
         setFiles((prev) =>
           prev.map((f) => (f.id === target.id ? { ...f, status: "Calculating score...", progress: 95 } : f))
         );
-        await new Promise((r) => setTimeout(r, 180));
+        await new Promise((r) => setTimeout(r, 120));
 
-        // Step 6: Completed ✓
+        // Step 6: Analysis Complete ✓
+        const isDup = res?.duplicate === true;
         setFiles((prev) =>
           prev.map((f) =>
             f.id === target.id
@@ -182,7 +184,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                   ...f,
                   status: "Completed ✓",
                   progress: 100,
-                  candidateName: res?.name || "Verified Candidate",
+                  candidateName: isDup ? `${res?.name} (Already Uploaded)` : (res?.name || "Verified Candidate"),
                 }
               : f
           )

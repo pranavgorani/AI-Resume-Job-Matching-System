@@ -76,6 +76,8 @@ class Candidate(Base):
     portfolio = Column(String(255), nullable=True)
     summary = Column(Text, nullable=True)
     total_experience_years = Column(Float, default=0.0)
+    processing_status = Column(String(50), default="COMPLETED", index=True)  # UPLOADING, UPLOADED, QUEUED, PARSING, ANALYZING, COMPLETED, FAILED
+    processing_error = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     job = relationship("Job", back_populates="candidates")
@@ -96,14 +98,53 @@ class Resume(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     candidate_id = Column(Integer, ForeignKey("candidates.id"), nullable=False)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True, index=True)
+    original_filename = Column(String(255), nullable=True)
     file_name = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=True)
+    storage_bucket = Column(String(100), default="resume-files")
+    storage_path = Column(String(500), nullable=True)
     file_type = Column(String(50), default="pdf")
+    file_size = Column(Integer, default=0)
+    file_hash = Column(String(64), index=True, nullable=True)
+    processing_status = Column(String(50), default="COMPLETED", index=True)
+    processing_error = Column(Text, nullable=True)
+    resume_version = Column(Integer, default=1)
     raw_text = Column(Text, nullable=False)
     parsed_json = Column(JSON, default=dict)
     uploaded_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     candidate = relationship("Candidate", back_populates="resumes")
+
+class ProcessingJob(Base):
+    __tablename__ = "processing_jobs"
+
+    id = Column(String(64), primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False, index=True)
+    candidate_id = Column(Integer, ForeignKey("candidates.id"), nullable=True, index=True)
+    file_name = Column(String(255), nullable=False)
+    file_hash = Column(String(64), nullable=True, index=True)
+    status = Column(String(50), default="QUEUED", index=True)  # QUEUED, UPLOADING, UPLOADED, PARSING, ANALYZING, COMPLETED, FAILED
+    stage = Column(String(100), default="Queued")
+    progress_percent = Column(Integer, default=0)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class AnalysisRun(Base):
+    __tablename__ = "analysis_runs"
+
+    id = Column(String(64), primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False, index=True)
+    benchmark_run_id = Column(String(64), nullable=True, index=True)
+    seed = Column(Integer, nullable=True)
+    total_candidates = Column(Integer, default=0)
+    completed_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    results_summary = Column(JSON, default=dict)
+    status = Column(String(50), default="IN_PROGRESS")  # IN_PROGRESS, COMPLETED, FAILED
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
 
 class CandidateExperience(Base):
     __tablename__ = "candidate_experience"

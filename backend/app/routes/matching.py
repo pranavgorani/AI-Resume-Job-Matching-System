@@ -58,9 +58,9 @@ def run_matching_engine(
         for r in requirements
     ]
 
-    # Only evaluate candidates assigned to this job_id or unassigned in candidate pool
+    # Strictly evaluate candidates assigned to this job_id
     candidates = db.query(orm.Candidate).filter(
-        (orm.Candidate.job_id == job_id) | (orm.Candidate.job_id.is_(None))
+        orm.Candidate.job_id == job_id
     ).all()
     if not candidates:
         # Clear prior match results if no candidates exist for this job
