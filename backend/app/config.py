@@ -15,8 +15,14 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     DEBUG: bool = True
     
+    # Environment check for serverless environments (Vercel / AWS Lambda)
+    IS_SERVERLESS: bool = os.getenv("VERCEL") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None
+
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR}/talentproof.db")
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL", 
+        "sqlite:////tmp/talentproof.db" if (os.getenv("VERCEL") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None) else f"sqlite:///{BASE_DIR}/talentproof.db"
+    )
     
     # Gemini AI
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
@@ -32,7 +38,7 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "resumes")
     
     # Uploads
-    UPLOAD_DIR: Path = BASE_DIR / "uploads"
+    UPLOAD_DIR: Path = Path("/tmp/uploads") if (os.getenv("VERCEL") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None) else (BASE_DIR / "uploads")
     
     # Default Match Weights (recruiter configurable)
     WEIGHT_REQUIRED_SKILLS: float = 0.35
